@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Speech Helper">
+    <title>Speech Helper</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            padding: 15px;
+            padding-bottom: 40px;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .status-badge.enrolled { background: rgba(46, 204, 113, 0.4); }
+        .status-badge.not-enrolled { background: rgba(231, 76, 60, 0.4); }
+        .status-badge.corrections { background: rgba(241, 196, 15, 0.4); }
+
+        .record-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            background: white;
+            color: #667eea;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            transition: transform 0.2s ease, background 0.2s ease;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .record-btn:active { transform: scale(0.95); }
+        .record-btn.recording { background: #ff4757; color: white; animation: pulse 1s infinite; }
+        .record-btn.processing { background: #ffa502; color: white; }
+        .record-btn.disabled { opacity: 0.6; pointer-events: none; }
+        .record-btn .icon { font-size: 35px; margin-bottom: 5px; }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); }
+            50% { box-shadow: 0 0 0 15px rgba(255, 71, 87, 0); }
+        }
+
+        .result-section {
+            background: rgba(255,255,255,0.15);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 10px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .transcription-box {
+            background: white;
+            color: #333;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 10px;
+        }
+
+        .transcription-text {
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+            line-height: 1.3;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            background: #667eea;
+            border: none;
+            border-radius: 20px;
+            color: white;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .action-btn:active { background: #5a6fd6; transform: scale(0.98); }
+        .action-btn.secondary { background: rgba(255,255,255,0.2); }
+        .action-btn.danger { background: #e74c3c; }
+
+        .correction-panel {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+
+        .correction-input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .status { font-size: 13px; opacity: 0.9; margin-top: 8px; }
+
+        .error {
+            color: #c0392b;
+            background: rgba(255,255,255,0.9);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .speaker-warning {
+            background: rgba(231, 76, 60, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .enrollment-section, .retrain-section {
+            background: rgba(255,255,255,0.15);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .enroll-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px dashed rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .enroll-btn.recording { background: #ff4757; border-style: solid; }
+        .enroll-btn .icon { font-size: 30px; margin-bottom: 5px; }
+
+        .enroll-progress {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .enroll-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+        }
+
+        .enroll-dot.filled { background: white; }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .tab.active { background: rgba(255,255,255,0.4); font-weight: 600; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            max-width: 350px;
+            margin: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .modal h3 {
+            margin: 0 0 15px;
+            color: #667eea;
+        }
+
+        .modal p {
+            margin: 0 0 20px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .modal .button-row {
+            margin-top: 0;
+        }
+
+        @supports (-webkit-touch-callout: none) {
+            body { min-height: -webkit-fill-available; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Speech Helper</h1>
+        <p class="subtitle">End-to-end speech recognition</p>
+
+        <div class="status-bar">
+            <div class="status-badge" id="voiceStatus">Checking...</div>
+            <div class="status-badge corrections" id="correctionStatus" style="display: none;">0 corrections pending</div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('recognize')">Recognize</button>
+            <button class="tab" onclick="showTab('settings')">Settings</button>
+        </div>
+
+        <!-- Recognize Tab -->
+        <div class="tab-content active" id="recognizeTab">
+            <button class="record-btn" id="recordBtn">
+                <span class="icon" id="btnIcon">&#127908;</span>
+                <span class="label" id="btnLabel">Tap to Talk</span>
+            </button>
+
+            <div class="status" id="status">Ready to listen</div>
+
+            <div id="resultSection" style="display: none;">
+                <div class="result-section">
+                    <div class="transcription-box">
+                        <div class="section-title" style="color: #999;">Recognized:</div>
+                        <div class="transcription-text" id="transcriptionText"></div>
+
+                        <div class="button-row">
+                            <button class="action-btn" id="speakBtn">&#128266; Speak</button>
+                            <button class="action-btn secondary" id="correctBtn">&#9998; Wrong?</button>
+                        </div>
+                    </div>
+
+                    <!-- Correction Panel (hidden by default) -->
+                    <div class="correction-panel" id="correctionPanel" style="display: none;">
+                        <div class="section-title">What was actually said?</div>
+                        <input type="text" class="correction-input" id="correctionInput"
+                               placeholder="Type the correct word/phrase...">
+                        <div class="button-row">
+                            <button class="action-btn" id="submitCorrection">Save Correction</button>
+                            <button class="action-btn secondary" id="cancelCorrection">Cancel</button>
+                        </div>
+                        <p style="font-size: 11px; opacity: 0.7; margin-top: 10px;">
+                            Corrections are saved for model retraining
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="speakerWarning" class="speaker-warning" style="display: none;">
+                Voice not recognized. Make sure the enrolled speaker is speaking.
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="settingsTab">
+            <!-- Voice Enrollment -->
+            <div class="enrollment-section">
+                <div class="section-title">Voice Profile</div>
+                <p style="font-size: 13px; opacity: 0.9; margin: 10px 0;">
+                    Record 3 samples to filter out other speakers.
+                </p>
+
+                <button class="enroll-btn" id="enrollBtn">
+                    <span class="icon">&#127897;</span>
+                    <span id="enrollLabel">Record</span>
+                </button>
+
+                <div class="enroll-progress" id="enrollProgress">
+                    <div class="enroll-dot" id="dot1"></div>
+                    <div class="enroll-dot" id="dot2"></div>
+                    <div class="enroll-dot" id="dot3"></div>
+                </div>
+
+                <div class="status" id="enrollStatus">Tap to record sample 1 of 3</div>
+
+                <div class="button-row" style="margin-top: 15px;">
+                    <button class="action-btn" id="saveEnrollment" style="display: none;">Save Voice Profile</button>
+                    <button class="action-btn secondary" id="resetEnrollment">Reset</button>
+                </div>
+            </div>
+
+            <!-- Model Retraining -->
+            <div class="retrain-section">
+                <div class="section-title">Model Training</div>
+                <p style="font-size: 13px; opacity: 0.9; margin: 10px 0;">
+                    Retrain the model with saved corrections to improve accuracy.
+                </p>
+
+                <div class="status" id="retrainStatus">
+                    <span id="pendingCorrections">0</span> corrections pending
+                </div>
+
+                <div class="button-row" style="margin-top: 15px;">
+                    <button class="action-btn" id="retrainBtn">&#129504; Retrain Model</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <h3>Retrain Model?</h3>
+            <p id="confirmMessage">
+                This will retrain the model with all corrections.
+                This process may take several minutes.
+            </p>
+            <div class="button-row">
+                <button class="action-btn danger" id="confirmRetrain">Yes, Retrain</button>
+                <button class="action-btn secondary" id="cancelRetrain">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const btnIcon = document.getElementById('btnIcon');
+        const btnLabel = document.getElementById('btnLabel');
+        const statusEl = document.getElementById('status');
+        const resultSection = document.getElementById('resultSection');
+        const transcriptionText = document.getElementById('transcriptionText');
+        const speakBtn = document.getElementById('speakBtn');
+        const correctBtn = document.getElementById('correctBtn');
+        const correctionPanel = document.getElementById('correctionPanel');
+        const correctionInput = document.getElementById('correctionInput');
+        const submitCorrection = document.getElementById('submitCorrection');
+        const cancelCorrection = document.getElementById('cancelCorrection');
+        const speakerWarning = document.getElementById('speakerWarning');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const correctionStatus = document.getElementById('correctionStatus');
+
+        // Enrollment elements
+        const enrollBtn = document.getElementById('enrollBtn');
+        const enrollLabel = document.getElementById('enrollLabel');
+        const enrollStatus = document.getElementById('enrollStatus');
+        const saveEnrollment = document.getElementById('saveEnrollment');
+        const resetEnrollment = document.getElementById('resetEnrollment');
+
+        // Retrain elements
+        const retrainBtn = document.getElementById('retrainBtn');
+        const retrainStatus = document.getElementById('retrainStatus');
+        const pendingCorrections = document.getElementById('pendingCorrections');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmRetrain = document.getElementById('confirmRetrain');
+        const cancelRetrain = document.getElementById('cancelRetrain');
+
+        // State
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioContext = null;
+        let stream = null;
+        let isRecording = false;
+        let isProcessing = false;
+        let currentTranscription = '';
+
+        // Enrollment state
+        let enrollmentSamples = [];
+        let isEnrolling = false;
+        const SAMPLES_NEEDED = 3;
+
+        // Utility functions
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+        }
+
+        async function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window && text) {
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.85;
+                utterance.pitch = 1;
+                utterance.volume = 1;
+                const voices = speechSynthesis.getVoices();
+                const preferredVoice = voices.find(v =>
+                    v.name.includes('Samantha') || v.name.includes('Karen') ||
+                    (v.lang.startsWith('en') && v.localService)
+                );
+                if (preferredVoice) utterance.voice = preferredVoice;
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        if ('speechSynthesis' in window) {
+            speechSynthesis.getVoices();
+            speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab-content#${tabName}Tab`).classList.add('active');
+            event.target.classList.add('active');
+
+            // Refresh correction count when switching to settings
+            if (tabName === 'settings') {
+                checkRetrainStatus();
+            }
+        }
+
+        // Check voice enrollment status
+        async function checkVoiceStatus() {
+            try {
+                const response = await fetch('/voice-status');
+                const data = await response.json();
+                if (data.enrolled) {
+                    voiceStatus.textContent = 'Voice enrolled';
+                    voiceStatus.className = 'status-badge enrolled';
+                } else {
+                    voiceStatus.textContent = 'No voice enrolled';
+                    voiceStatus.className = 'status-badge not-enrolled';
+                }
+            } catch (e) {
+                voiceStatus.textContent = 'Status unknown';
+            }
+        }
+
+        // Check retrain status
+        async function checkRetrainStatus() {
+            try {
+                const response = await fetch('/retrain-status');
+                const data = await response.json();
+                const count = data.correction_count || 0;
+                pendingCorrections.textContent = count;
+
+                if (count > 0) {
+                    correctionStatus.style.display = 'inline-block';
+                    correctionStatus.textContent = `${count} correction${count > 1 ? 's' : ''} pending`;
+                } else {
+                    correctionStatus.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Error checking retrain status:', e);
+            }
+        }
+
+        // Recording functions
+        function updateButton(state) {
+            recordBtn.classList.remove('recording', 'processing', 'disabled');
+            switch(state) {
+                case 'ready':
+                    btnIcon.innerHTML = '&#127908;';
+                    btnLabel.textContent = 'Tap to Talk';
+                    break;
+                case 'recording':
+                    recordBtn.classList.add('recording');
+                    btnIcon.innerHTML = '&#128308;';
+                    btnLabel.textContent = 'Tap to Stop';
+                    break;
+                case 'processing':
+                    recordBtn.classList.add('processing', 'disabled');
+                    btnIcon.innerHTML = '&#8987;';
+                    btnLabel.textContent = 'Processing...';
+                    break;
+            }
+        }
+
+        async function startRecording() {
+            if (isRecording || isProcessing) return;
+            try {
+                await initAudio();
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
+
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/mp4';
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+
+                const options = mimeType ? { mimeType } : {};
+                mediaRecorder = new MediaRecorder(stream, options);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = () => processAudio();
+
+                mediaRecorder.start(100);
+                isRecording = true;
+                updateButton('recording');
+                statusEl.textContent = 'Listening... (tap when done)';
+                resultSection.style.display = 'none';
+                speakerWarning.style.display = 'none';
+                correctionPanel.style.display = 'none';
+            } catch (err) {
+                console.error('Error starting recording:', err);
+                statusEl.textContent = 'Error: ' + err.message;
+                updateButton('ready');
+            }
+        }
+
+        function stopRecording() {
+            if (!isRecording || !mediaRecorder) return;
+            isRecording = false;
+            isProcessing = true;
+            if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            updateButton('processing');
+            statusEl.textContent = 'Processing...';
+        }
+
+        async function processAudio() {
+            try {
+                if (audioChunks.length === 0) throw new Error('No audio recorded');
+
+                const audioBlob = new Blob(audioChunks, { type: audioChunks[0].type || 'audio/webm' });
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const audioData = audioBuffer.getChannelData(0);
+                const float32Array = new Float32Array(audioData);
+                const base64 = arrayBufferToBase64(float32Array.buffer);
+
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio: base64, sampleRate: audioBuffer.sampleRate })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    if (data.error.includes('enrolled speaker') || data.error.includes('target speaker')) {
+                        speakerWarning.style.display = 'block';
+                        speakerWarning.textContent = data.error;
+                        statusEl.textContent = 'Voice not detected';
+                    } else {
+                        statusEl.textContent = data.error;
+                        resultSection.innerHTML = '<div class="error">' + data.error + '</div>';
+                        resultSection.style.display = 'block';
+                    }
+                } else {
+                    displayResult(data);
+                }
+            } catch (err) {
+                console.error('Error processing audio:', err);
+                statusEl.textContent = 'Error processing audio';
+            }
+
+            isProcessing = false;
+            updateButton('ready');
+        }
+
+        function displayResult(data) {
+            const text = data.transcription || '';
+            currentTranscription = text;
+
+            if (text) {
+                transcriptionText.textContent = text;
+                resultSection.style.display = 'block';
+                speakerWarning.style.display = 'none';
+
+                // Show status with speaker segments info
+                if (data.speaker_segments && data.speaker_segments.length > 0) {
+                    const totalDuration = data.speaker_segments.reduce((sum, s) => sum + (s.end - s.start), 0);
+                    statusEl.textContent = `Detected ${totalDuration.toFixed(1)}s of speech`;
+                } else {
+                    statusEl.textContent = 'Recognition complete!';
+                }
+
+                setTimeout(() => speak(text), 500);
+            } else {
+                statusEl.textContent = 'No speech detected';
+                resultSection.style.display = 'none';
+            }
+        }
+
+        // Correction handlers
+        correctBtn.addEventListener('click', () => {
+            correctionPanel.style.display = 'block';
+            correctionInput.value = '';
+            correctionInput.focus();
+        });
+
+        cancelCorrection.addEventListener('click', () => {
+            correctionPanel.style.display = 'none';
+        });
+
+        submitCorrection.addEventListener('click', async () => {
+            const correct = correctionInput.value.trim();
+            if (!correct) return;
+
+            try {
+                const response = await fetch('/correct', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ correct: correct })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    correctionPanel.style.display = 'none';
+                    transcriptionText.textContent = correct;
+                    currentTranscription = correct;
+                    statusEl.textContent = `Saved! (${data.correction_count} corrections pending)`;
+                    speak(correct);
+                    checkRetrainStatus();
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+                }
+            } catch (err) {
+                console.error('Error submitting correction:', err);
+                statusEl.textContent = 'Error saving correction';
+            }
+        });
+
+        // Retrain handlers
+        retrainBtn.addEventListener('click', () => {
+            confirmModal.classList.add('active');
+        });
+
+        cancelRetrain.addEventListener('click', () => {
+            confirmModal.classList.remove('active');
+        });
+
+        confirmRetrain.addEventListener('click', async () => {
+            confirmModal.classList.remove('active');
+            retrainStatus.innerHTML = '<strong>Retraining in progress...</strong> This may take several minutes.';
+            retrainBtn.disabled = true;
+            retrainBtn.textContent = 'Training...';
+
+            try {
+                const response = await fetch('/retrain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    retrainStatus.innerHTML = data.message;
+                    checkRetrainStatus();
+                } else {
+                    retrainStatus.innerHTML = data.message;
+                }
+            } catch (err) {
+                retrainStatus.innerHTML = 'Error: ' + err.message;
+            }
+
+            retrainBtn.disabled = false;
+            retrainBtn.innerHTML = '&#129504; Retrain Model';
+        });
+
+        // Enrollment handlers
+        function updateEnrollmentUI() {
+            for (let i = 0; i < SAMPLES_NEEDED; i++) {
+                const dot = document.getElementById('dot' + (i + 1));
+                dot.className = 'enroll-dot' + (i < enrollmentSamples.length ? ' filled' : '');
+            }
+
+            if (enrollmentSamples.length >= SAMPLES_NEEDED) {
+                enrollStatus.textContent = 'All samples recorded! Tap Save.';
+                saveEnrollment.style.display = 'inline-block';
+            } else {
+                enrollStatus.textContent = `Tap to record sample ${enrollmentSamples.length + 1} of ${SAMPLES_NEEDED}`;
+                saveEnrollment.style.display = 'none';
+            }
+        }
+
+        async function startEnrollRecording() {
+            if (isEnrolling) return;
+            try {
+                await initAudio();
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
+
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/mp4';
+
+                const options = mimeType ? { mimeType } : {};
+                mediaRecorder = new MediaRecorder(stream, options);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: audioChunks[0].type || 'audio/webm' });
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                    const audioData = audioBuffer.getChannelData(0);
+                    const float32Array = new Float32Array(audioData);
+                    const base64 = arrayBufferToBase64(float32Array.buffer);
+
+                    enrollmentSamples.push({
+                        audio: base64,
+                        sampleRate: audioBuffer.sampleRate
+                    });
+
+                    updateEnrollmentUI();
+                    enrollBtn.classList.remove('recording');
+                    enrollLabel.textContent = 'Record';
+                    isEnrolling = false;
+                };
+
+                mediaRecorder.start(100);
+                isEnrolling = true;
+                enrollBtn.classList.add('recording');
+                enrollLabel.textContent = 'Stop';
+                enrollStatus.textContent = 'Recording... tap to stop';
+
+            } catch (err) {
+                console.error('Error:', err);
+                enrollStatus.textContent = 'Error: ' + err.message;
+            }
+        }
+
+        function stopEnrollRecording() {
+            if (!isEnrolling || !mediaRecorder) return;
+            if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }
+
+        enrollBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (enrollmentSamples.length >= SAMPLES_NEEDED) return;
+            if (isEnrolling) {
+                stopEnrollRecording();
+            } else {
+                startEnrollRecording();
+            }
+        });
+
+        saveEnrollment.addEventListener('click', async () => {
+            try {
+                enrollStatus.textContent = 'Saving voice profile...';
+                const response = await fetch('/enroll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ samples: enrollmentSamples })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    enrollStatus.textContent = 'Voice enrolled successfully!';
+                    checkVoiceStatus();
+                } else {
+                    enrollStatus.textContent = 'Error: ' + data.error;
+                }
+            } catch (err) {
+                enrollStatus.textContent = 'Error saving: ' + err.message;
+            }
+        });
+
+        resetEnrollment.addEventListener('click', () => {
+            enrollmentSamples = [];
+            updateEnrollmentUI();
+        });
+
+        // Main recording toggle
+        function toggleRecording(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isProcessing) return;
+            if (isRecording) stopRecording();
+            else startRecording();
+        }
+
+        recordBtn.addEventListener('click', toggleRecording);
+        recordBtn.addEventListener('touchend', (e) => e.preventDefault());
+        recordBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+        speakBtn.addEventListener('click', () => { if (currentTranscription) speak(currentTranscription); });
+
+        // Initialize
+        checkVoiceStatus();
+        checkRetrainStatus();
+        updateEnrollmentUI();
+    </script>
+</body>
+</html>

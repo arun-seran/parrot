@@ -1,0 +1,13 @@
+# Core dependencies
+flask>=2.0.0
+numpy>=1.21.0
+librosa>=0.9.0
+scipy>=1.7.0
+
+# Machine Learning
+torch>=2.0.0
+transformers>=4.30.0
+datasets>=2.0.0
+
+# Speaker recognition (optional - for voice filtering)
+resemblyzer>=0.1.1
