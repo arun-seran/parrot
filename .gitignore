@@ -36,25 +36,19 @@ env/
 # Jupyter Notebooks
 .ipynb_checkpoints/
 
-# Model files (too large for GitHub, users should download separately)
+# Model files (too large for GitHub, users should train their own)
 whisper-finetuned/
 *.bin
 *.safetensors
 *.onnx
 
-# Voice profile (private - specific to user's speaker)
-enrolled_voice.npy
-
-# Training data (private - contains user's recordings)
+# Training data (users add their own)
 Recordings/*.wav
 Recordings/*.m4a
 Recordings/*.mp3
+Recordings/*.json
 
-# Corrections (private - contains user's audio corrections)
-Corrections/*.wav
-Corrections/*.json
-
-# SSL certificates (private)
+# SSL certificates (users generate their own)
 *.pem
 cert.pem
 key.pem

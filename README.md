@@ -2,38 +2,43 @@
 
 Parrot is an open-source speech recognition app designed for voices that standard speech-to-text models struggle with.
 
-It enables personalized speech recognition by fine-tuning OpenAI’s Whisper model on your own recordings, allowing the system to learn directly from examples instead of relying on brittle rule-based hacks.
+It enables personalized speech recognition by fine-tuning OpenAI's Whisper model on your own recordings, allowing the system to learn directly from examples instead of relying on brittle rule-based hacks.
 
-This project was built primarily to help children with speech difficulties, but it may also work for accented speech, unique vocabularies, and any voice that off-the-shelf models misrecognize. 
+## Why Live Transcription?
 
-**Use cases:**
-- Children with speech difficulties (autism etc.)
+This app was built primarily to help children with speech difficulties (due to autism) communicate. The previous version required pressing a button before each phrase, but children with autism often don't express themselves when they see adults going through the ritual of bringing up a phone and pressing buttons.
+
+**Live transcription solves this** - you simply start listening and let the child speak naturally. The transcription happens continuously, and you can easily distinguish what the child said by looking at the final text.
+
+## Use Cases
+
+- Children with speech difficulties (autism, apraxia, etc.)
 - Accented speech
 - Unique vocabularies or terminology
 - Any speech that off-the-shelf models misrecognize
 
 ## How It Works
 
-1. **Record training samples** - Collect recordings of the target speaker saying words/phrases you want to recognize
-2. **Fine-tune Whisper** - The app fine-tunes OpenAI's Whisper model on your recordings
-3. **Use the app** - Speak into the app and get accurate transcriptions
-4. **Improve over time** - Correct mistakes through the UI, then retrain to improve accuracy
+1. **Start live transcription** - Press the button and speak naturally
+2. **Train with examples** - Record words/phrases the model struggles with
+3. **Fine-tune Whisper** - The app trains the model on your recordings
+4. **See improvement** - The model learns to recognize those specific words
 
 ## Features
 
+- **Live transcription** - Continuous speech-to-text as you speak
 - **End-to-end learning** - No rule-based post-processing; the model learns directly from examples
-- **Speaker filtering** - Optionally filter audio to only recognize a specific enrolled speaker
-- **Correction workflow** - Easy UI to correct mistakes and save them for retraining
-- **Mobile-friendly** - Works on mobile browsers with HTTPS
-- **Self-improving** - Retrain the model from the UI as you collect more corrections
+- **Built-in training interface** - Record, label, and train from the web UI
+- **Mobile-friendly** - Works on iPhone/Android with HTTPS
+- **Self-improving** - Add more training samples to improve accuracy over time
 
 ## Quick Start
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/speech-to-text-helper.git
-cd speech-to-text-helper
+git clone https://github.com/ArunSaxena200/parrot.git
+cd parrot
 ```
 
 ### 2. Install dependencies
@@ -47,31 +52,67 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Install ffmpeg (only needed on Linux/Windows)
+### 3. Download the base Whisper model
 
-macOS users can skip this step - the app uses the built-in `afconvert` tool.
-
-```bash
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# Windows
-# Download from https://ffmpeg.org/download.html
-```
-
-Note: ffmpeg is only used to convert `.m4a` files during training. Normal app operation doesn't require it.
-
-### 4. Download the base Whisper model
-
-The app uses Whisper-tiny as the base model. It will be downloaded automatically on first run, but you can pre-download it:
+Before first use, download the base Whisper model (this only needs to be done once):
 
 ```bash
-python -c "from transformers import WhisperProcessor, WhisperForConditionalGeneration; WhisperProcessor.from_pretrained('openai/whisper-tiny'); WhisperForConditionalGeneration.from_pretrained('openai/whisper-tiny')"
+python -c "from transformers import WhisperProcessor, WhisperForConditionalGeneration; WhisperProcessor.from_pretrained('openai/whisper-tiny'); WhisperForConditionalGeneration.from_pretrained('openai/whisper-tiny'); print('Model downloaded!')"
 ```
 
-### 5. Add your training recordings
+This downloads ~150MB and caches it locally for future use.
 
-Place your audio recordings in the `Recordings/` folder:
+### 4. Run the app
+
+```bash
+python app.py
+```
+
+Open `http://localhost:5001` in your browser.
+
+### 5. Train the model (optional)
+
+If the base Whisper model struggles with certain words:
+
+1. Click "Train Model" in the app
+2. Enter a word/phrase and record it being spoken
+3. Add 5-10 samples per word for best results
+4. Click "Start Training" (takes 5-15 minutes)
+
+The model will now recognize those words better!
+
+## Mobile Access (iPhone/Android)
+
+Mobile browsers require HTTPS to access the microphone. Generate a self-signed certificate:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+```
+
+The app will automatically use HTTPS if it finds `cert.pem` and `key.pem`.
+
+Access from your phone using your computer's IP address (e.g., `https://192.168.1.100:5001`). You'll need to accept the security warning.
+
+## Project Structure
+
+```
+parrot/
+├── app.py                  # Flask web application (imports from speech_recognizer.py)
+├── speech_recognizer.py    # Live speech recognition module
+├── finetune_whisper.py     # Model fine-tuning script
+├── requirements.txt        # Python dependencies
+├── templates/
+│   ├── index.html          # Live transcription UI
+│   └── training.html       # Training interface
+├── Recordings/             # Training recordings (created when you add samples)
+└── whisper-finetuned/      # Fine-tuned model (created after training)
+```
+
+All imports are local - `app.py` imports from `speech_recognizer.py` in the same directory. No external dependencies beyond the pip packages.
+
+## Adding Training Recordings
+
+You can add recordings via the web UI, or manually:
 
 ```
 Recordings/
@@ -79,16 +120,17 @@ Recordings/
   goodbye.wav     # Will be labeled as "goodbye"
   water1.wav      # Will be labeled as "water"
   water2.wav      # Will be labeled as "water"
-  mommy.m4a       # Will be labeled as "mommy"
 ```
 
-**Recording format:**
+**Recording tips:**
 - Supported formats: `.wav`, `.m4a`
 - The filename (without extension and numbers) becomes the label
 - Record multiple samples of each word for better results
 - Keep recordings short (1-3 seconds per word/phrase)
 
-### 6. Fine-tune the model
+## Manual Training
+
+You can also train from the command line:
 
 ```bash
 python finetune_whisper.py
@@ -100,86 +142,27 @@ This will:
 - Fine-tune Whisper on your data
 - Save the model to `whisper-finetuned/`
 
-Training typically takes 5-15 minutes depending on your hardware.
+## Installing ffmpeg (Linux/Windows only)
 
-### 7. Run the app
-
-```bash
-python app.py
-```
-
-Open `http://localhost:5001` in your browser.
-
-## Mobile Access (iPhone/Android)
-
-Mobile browsers require HTTPS to access the microphone. Generate a self-signed certificate:
+macOS users can skip this - the app uses the built-in `afconvert` tool.
 
 ```bash
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# Windows
+# Download from https://ffmpeg.org/download.html
 ```
 
-The app will automatically use HTTPS if it finds `cert.pem` and `key.pem`.
-
-Access from your phone using your computer's IP address (e.g., `https://192.168.24.100:5001`). You'll need to accept the security warning.
-
-## Project Structure
-
-```
-speech-to-text-helper/
-├── app.py                  # Flask web application
-├── speech_recognizer.py    # Core speech recognition logic
-├── finetune_whisper.py     # Model fine-tuning script
-├── requirements.txt        # Python dependencies
-├── templates/
-│   └── index.html          # Web UI
-├── Recordings/             # Your training recordings (add your files here)
-├── Corrections/            # Corrections saved from the UI
-└── whisper-finetuned/      # Fine-tuned model (created after training)
-```
-
-## Configuration
-
-Edit `speech_recognizer.py` to customize:
-
-```python
-# Phrases to filter out (e.g., prompts you say before the speaker talks)
-IGNORE_PHRASES = [
-    "what do you want",
-    "say it again",
-]
-```
-
-## Retraining
-
-As you use the app:
-
-1. When the model makes a mistake, tap "Wrong?" and enter the correct text
-2. The correction is saved to `Corrections/`
-3. Go to Settings > Retrain Model to retrain with your corrections
-
-You can also retrain manually:
-
-```bash
-python finetune_whisper.py
-```
-
-## Voice Enrollment (Optional)
-
-If multiple people will use the app, you can enroll a specific voice to filter out other speakers:
-
-1. Go to Settings in the web UI
-2. Record 3 voice samples from the target speaker
-3. Save the voice profile
-
-The app will then only transcribe audio that matches the enrolled voice.
+Note: ffmpeg is only used to convert `.m4a` files during training.
 
 ## Tips for Better Results
 
 1. **More samples = better accuracy** - Record at least 5-10 samples of each word
 2. **Vary the recordings** - Different volumes, speeds, and contexts
 3. **Keep it simple** - Start with single words before phrases
-4. **Consistent labeling** - Use the same filename pattern for the same word
-5. **Quality recordings** - Minimize background noise
+4. **Quality recordings** - Minimize background noise
+5. **Be patient** - Training takes 5-15 minutes but the results are worth it
 
 ## Troubleshooting
 
@@ -189,10 +172,12 @@ pip install transformers
 ```
 
 ### "ffmpeg not found" (Linux/Windows only)
-Install ffmpeg for your platform (see installation steps above). macOS users don't need ffmpeg.
+Install ffmpeg for your platform (see installation steps above).
 
-### Model not loading
-Make sure you've run `finetune_whisper.py` first to create the `whisper-finetuned/` directory.
+### Model not improving
+- Add more training samples (5-10 per word minimum)
+- Make sure recordings are clear with minimal background noise
+- Try retraining from scratch by deleting `whisper-finetuned/`
 
 ### Mobile microphone not working
 - Ensure you're using HTTPS (see Mobile Access section)
@@ -213,4 +198,3 @@ MIT License - see [LICENSE](LICENSE)
 
 - [OpenAI Whisper](https://github.com/openai/whisper) - Base speech recognition model
 - [Hugging Face Transformers](https://huggingface.co/docs/transformers) - Model fine-tuning
-- [Resemblyzer](https://github.com/resemble-ai/Resemblyzer) - Speaker recognition

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Training - Parrot</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin: 0;
+        }
+
+        .nav-link {
+            color: #4ecca3;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title .count {
+            background: #4ecca3;
+            color: #1a1a2e;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        /* Recording Section */
+        .record-area {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .record-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            background: #e94560;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .record-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .record-btn.recording {
+            background: #4ecca3;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(78, 204, 163, 0.7); }
+            50% { box-shadow: 0 0 0 15px rgba(78, 204, 163, 0); }
+        }
+
+        .label-input-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .label-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .label-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .label-input:focus {
+            outline: none;
+            border-color: #4ecca3;
+        }
+
+        .hint {
+            font-size: 12px;
+            opacity: 0.6;
+        }
+
+        .status-msg {
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .status-msg.success {
+            background: rgba(78, 204, 163, 0.2);
+            color: #4ecca3;
+        }
+
+        .status-msg.error {
+            background: rgba(233, 69, 96, 0.2);
+            color: #e94560;
+        }
+
+        .status-msg.info {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Recordings List */
+        .recordings-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .recording-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .recording-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .recording-info {
+            flex: 1;
+        }
+
+        .recording-label {
+            font-weight: 600;
+            color: #4ecca3;
+        }
+
+        .recording-meta {
+            font-size: 12px;
+            opacity: 0.6;
+            margin-top: 2px;
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: 1px solid rgba(233, 69, 96, 0.5);
+            color: #e94560;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: rgba(233, 69, 96, 0.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        /* Training Section */
+        .train-btn {
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .train-btn:hover {
+            background: #3db892;
+            transform: scale(1.02);
+        }
+
+        .train-btn:disabled {
+            background: rgba(78, 204, 163, 0.3);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .model-status {
+            margin-top: 15px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .model-status .exists {
+            color: #4ecca3;
+        }
+
+        .model-status .missing {
+            color: #e94560;
+        }
+
+        /* Progress indicator */
+        .training-progress {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(78, 204, 163, 0.1);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .training-progress.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(78, 204, 163, 0.3);
+            border-top-color: #4ecca3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Model Training</h1>
+            <a href="/" class="nav-link">Back to Transcription</a>
+        </div>
+
+        <!-- Record New Sample -->
+        <div class="section">
+            <div class="section-title">Record Training Sample</div>
+            <div class="record-area">
+                <button class="record-btn" id="recordBtn">&#127908;</button>
+                <div class="label-input-group">
+                    <input type="text" class="label-input" id="labelInput"
+                           placeholder="Enter label (e.g., 'water', 'hello')"
+                           autocomplete="off">
+                    <div class="hint">Type the word/phrase, then click the button to record</div>
+                </div>
+            </div>
+            <div class="status-msg info" id="recordStatus">Enter a label and click the button to record</div>
+        </div>
+
+        <!-- Recordings List -->
+        <div class="section">
+            <div class="section-title">
+                Training Data
+                <span class="count" id="recordingCount">0</span>
+            </div>
+            <div class="recordings-list" id="recordingsList">
+                <div class="empty-state">No recordings yet. Add some training samples above.</div>
+            </div>
+        </div>
+
+        <!-- Train Model -->
+        <div class="section">
+            <div class="section-title">Fine-tune Model</div>
+            <p style="opacity: 0.7; margin-bottom: 15px;">
+                Train the Whisper model on your recordings. This typically takes 5-15 minutes.
+            </p>
+            <button class="train-btn" id="trainBtn">Start Training</button>
+            <div class="training-progress" id="trainingProgress">
+                <span class="spinner"></span>
+                <span id="trainingStatus">Training in progress...</span>
+            </div>
+            <div class="model-status" id="modelStatus"></div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const labelInput = document.getElementById('labelInput');
+        const recordStatus = document.getElementById('recordStatus');
+        const recordingsList = document.getElementById('recordingsList');
+        const recordingCount = document.getElementById('recordingCount');
+        const trainBtn = document.getElementById('trainBtn');
+        const trainingProgress = document.getElementById('trainingProgress');
+        const trainingStatus = document.getElementById('trainingStatus');
+        const modelStatus = document.getElementById('modelStatus');
+
+        // State
+        let isRecording = false;
+        let mediaRecorder = null;
+        let audioContext = null;
+        let audioChunks = [];
+        let stream = null;
+
+        // Utility
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+        }
+
+        async function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+        }
+
+        // Load recordings
+        async function loadRecordings() {
+            try {
+                const response = await fetch('/recordings');
+                const data = await response.json();
+
+                recordingCount.textContent = data.recordings.length;
+
+                if (data.recordings.length === 0) {
+                    recordingsList.innerHTML = '<div class="empty-state">No recordings yet. Add some training samples above.</div>';
+                    return;
+                }
+
+                recordingsList.innerHTML = data.recordings.map(rec => `
+                    <div class="recording-item" data-id="${rec.id}">
+                        <div class="recording-info">
+                            <div class="recording-label">"${rec.label}"</div>
+                            <div class="recording-meta">${rec.timestamp || rec.filename}</div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteRecording('${rec.id}')">Delete</button>
+                    </div>
+                `).join('');
+
+            } catch (err) {
+                console.error('Error loading recordings:', err);
+            }
+        }
+
+        // Delete recording
+        async function deleteRecording(id) {
+            if (!confirm('Delete this recording?')) return;
+
+            try {
+                await fetch(`/recordings/${id}`, { method: 'DELETE' });
+                loadRecordings();
+                loadTrainStatus();
+            } catch (err) {
+                console.error('Error deleting:', err);
+            }
+        }
+
+        // Load training status
+        async function loadTrainStatus() {
+            try {
+                const response = await fetch('/train-status');
+                const data = await response.json();
+
+                let status = '';
+                if (data.model_exists) {
+                    status = '<span class="exists">Fine-tuned model ready</span>';
+                } else {
+                    status = '<span class="missing">No fine-tuned model yet - using base Whisper</span>';
+                }
+                modelStatus.innerHTML = status;
+
+                trainBtn.disabled = data.recording_count === 0;
+
+            } catch (err) {
+                console.error('Error loading status:', err);
+            }
+        }
+
+        // Recording functions
+        async function startRecording() {
+            const label = labelInput.value.trim();
+            if (!label) {
+                recordStatus.textContent = 'Please enter a label first';
+                recordStatus.className = 'status-msg error';
+                labelInput.focus();
+                return;
+            }
+
+            try {
+                await initAudio();
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
+
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/mp4';
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+
+                const options = mimeType ? { mimeType } : {};
+                mediaRecorder = new MediaRecorder(stream, options);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => saveRecording(label);
+
+                mediaRecorder.start(100);
+                isRecording = true;
+                recordBtn.classList.add('recording');
+                recordBtn.innerHTML = '&#9899;';
+                recordStatus.textContent = `Recording "${label}"... Click to stop`;
+                recordStatus.className = 'status-msg info';
+
+            } catch (err) {
+                console.error('Error:', err);
+                recordStatus.textContent = 'Error: ' + err.message;
+                recordStatus.className = 'status-msg error';
+            }
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+            isRecording = false;
+            recordBtn.classList.remove('recording');
+            recordBtn.innerHTML = '&#127908;';
+
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+
+            recordStatus.textContent = 'Processing...';
+        }
+
+        async function saveRecording(label) {
+            try {
+                const audioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const audioData = audioBuffer.getChannelData(0);
+                const float32Array = new Float32Array(audioData);
+                const base64 = arrayBufferToBase64(float32Array.buffer);
+
+                const response = await fetch('/recordings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audio: base64,
+                        label: label,
+                        sampleRate: audioBuffer.sampleRate
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    recordStatus.textContent = `Saved "${label}" - Add more samples or try a different word`;
+                    recordStatus.className = 'status-msg success';
+                    loadRecordings();
+                    loadTrainStatus();
+                } else {
+                    recordStatus.textContent = 'Error: ' + (data.error || 'Unknown error');
+                    recordStatus.className = 'status-msg error';
+                }
+
+            } catch (err) {
+                console.error('Error saving:', err);
+                recordStatus.textContent = 'Error saving: ' + err.message;
+                recordStatus.className = 'status-msg error';
+            }
+        }
+
+        // Train model
+        async function startTraining() {
+            if (!confirm('Start training? This may take 5-15 minutes.')) return;
+
+            trainBtn.disabled = true;
+            trainingProgress.classList.add('active');
+            trainingStatus.textContent = 'Training in progress... This may take several minutes.';
+
+            try {
+                const response = await fetch('/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    trainingStatus.textContent = data.message;
+                    trainingProgress.style.background = 'rgba(78, 204, 163, 0.2)';
+                } else {
+                    trainingStatus.textContent = 'Error: ' + data.message;
+                    trainingProgress.style.background = 'rgba(233, 69, 96, 0.2)';
+                }
+
+            } catch (err) {
+                trainingStatus.textContent = 'Error: ' + err.message;
+                trainingProgress.style.background = 'rgba(233, 69, 96, 0.2)';
+            }
+
+            trainBtn.disabled = false;
+            loadTrainStatus();
+
+            // Hide progress after 5 seconds
+            setTimeout(() => {
+                trainingProgress.classList.remove('active');
+            }, 5000);
+        }
+
+        // Event listeners
+        recordBtn.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        trainBtn.addEventListener('click', startTraining);
+
+        // Allow Enter key to start recording
+        labelInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !isRecording) {
+                startRecording();
+            }
+        });
+
+        // Initialize
+        loadRecordings();
+        loadTrainStatus();
+    </script>
+</body>
+</html>

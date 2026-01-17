@@ -4,17 +4,13 @@ Fine-tune Whisper on custom speech recordings.
 
 This creates an end-to-end model that directly maps speech to text,
 learning from your specific examples rather than relying on post-processing.
-
-Use this for:
-- Children with speech difficulties
-- Accented speech
-- Unique vocabularies or terminology
-- Any speech that standard models struggle with
 """
 
 import os
 import json
-import random
+import platform
+import subprocess
+import tempfile
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
@@ -22,7 +18,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 import torch
 import librosa
-from datasets import Dataset, Audio
+from datasets import Dataset
 from transformers import (
     WhisperProcessor,
     WhisperForConditionalGeneration,
@@ -34,99 +30,18 @@ warnings.filterwarnings('ignore')
 
 # Configuration
 SAMPLE_RATE = 16000
-MODEL_NAME = "openai/whisper-tiny"  # tiny model for faster fine-tuning
+MODEL_NAME = "openai/whisper-tiny"
 OUTPUT_DIR = "./whisper-finetuned"
-RECORDINGS_DIR = "Recordings"
-CORRECTIONS_DIR = "Corrections"
-
-
-def load_recordings(recordings_dir):
-    """Load all recordings and their labels from Recordings folder.
-
-    Expected format: filename contains the label (e.g., "hello.wav" -> "hello")
-    """
-    data = []
-
-    if not os.path.exists(recordings_dir):
-        print(f"Recordings directory not found: {recordings_dir}")
-        return data
-
-    for filename in os.listdir(recordings_dir):
-        if not (filename.endswith('.m4a') or filename.endswith('.wav')):
-            continue
-
-        filepath = os.path.join(recordings_dir, filename)
-
-        # Extract label from filename (remove extension and numbers)
-        label = os.path.splitext(filename)[0]
-        label = ''.join([c for c in label if not c.isdigit()]).strip()
-
-        data.append({
-            'audio_path': filepath,
-            'text': label.lower()  # lowercase for consistency
-        })
-
-    print(f"Found {len(data)} recordings from {recordings_dir}")
-    return data
-
-
-def load_corrections(corrections_dir):
-    """Load corrections from Corrections folder (wav files with json metadata)."""
-    data = []
-
-    if not os.path.exists(corrections_dir):
-        print(f"Corrections directory not found: {corrections_dir}")
-        return data
-
-    for filename in os.listdir(corrections_dir):
-        if not filename.endswith('.wav'):
-            continue
-
-        wav_path = os.path.join(corrections_dir, filename)
-        json_path = os.path.join(corrections_dir, filename.replace('.wav', '.json'))
-
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as f:
-                metadata = json.load(f)
-            label = metadata.get('correct_text', '').lower().strip()
-        else:
-            # Fall back to filename
-            label = os.path.splitext(filename)[0]
-            label = label.rsplit('_', 1)[0]  # Remove timestamp
-            label = label.replace('_', ' ').lower().strip()
-
-        if label:
-            data.append({
-                'audio_path': wav_path,
-                'text': label
-            })
-
-    print(f"Found {len(data)} corrections from {corrections_dir}")
-    return data
-
-
-def load_all_training_data():
-    """Load both recordings and corrections."""
-    recordings = load_recordings(RECORDINGS_DIR)
-    corrections = load_corrections(CORRECTIONS_DIR)
-
-    all_data = recordings + corrections
-    print(f"\nTotal training samples: {len(all_data)}")
-
-    return all_data
+RECORDINGS_DIR = "./Recordings"
 
 
 def convert_m4a_to_wav(m4a_path):
-    """Convert m4a to wav using afconvert (macOS) or ffmpeg (other platforms)."""
-    import tempfile
-    import subprocess
-    import platform
-
+    """Convert m4a to wav using afconvert (macOS) or ffmpeg (Linux/Windows)."""
     temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     temp_wav.close()
 
     if platform.system() == "Darwin":
-        # macOS - use built-in afconvert (no extra install needed)
+        # macOS - use built-in afconvert
         subprocess.run([
             'afconvert', '-f', 'WAVE', '-d', 'LEI16',
             m4a_path, temp_wav.name
@@ -142,8 +57,53 @@ def convert_m4a_to_wav(m4a_path):
     return temp_wav.name
 
 
+def load_recordings(recordings_dir, source_name=""):
+    """Load recordings from a directory."""
+    data = []
+
+    if not os.path.exists(recordings_dir):
+        return data
+
+    for filename in os.listdir(recordings_dir):
+        if not (filename.endswith('.m4a') or filename.endswith('.wav')):
+            continue
+
+        filepath = os.path.join(recordings_dir, filename)
+        json_path = filepath.rsplit('.', 1)[0] + '.json'
+
+        # Try to load label from JSON metadata
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                metadata = json.load(f)
+            label = metadata.get('label', metadata.get('correct_text', '')).lower().strip()
+        else:
+            # Fall back to filename
+            label = os.path.splitext(filename)[0]
+            # Remove numbers and timestamp patterns
+            label = ''.join([c for c in label if not c.isdigit()]).strip()
+            label = label.replace('_', ' ').strip()
+
+        if label:
+            data.append({
+                'audio_path': filepath,
+                'text': label.lower()
+            })
+
+    if data:
+        print(f"  {source_name}: {len(data)} recordings")
+
+    return data
+
+
+def load_all_training_data():
+    """Load training data from Recordings directory."""
+    all_data = load_recordings(RECORDINGS_DIR, "Recordings")
+    print(f"\nTotal training samples: {len(all_data)}")
+    return all_data
+
+
 def load_audio(audio_path):
-    """Load audio file and return numpy array."""
+    """Load audio file, converting m4a if needed."""
     if audio_path.endswith('.m4a'):
         wav_path = convert_m4a_to_wav(audio_path)
         audio, sr = librosa.load(wav_path, sr=SAMPLE_RATE)
@@ -184,8 +144,12 @@ def augment_audio(audio, sr=SAMPLE_RATE):
 
 
 def prepare_dataset(augment=True):
-    """Prepare dataset for training from all sources."""
+    """Prepare dataset for training."""
     recordings = load_all_training_data()
+
+    if not recordings:
+        print("No recordings found!")
+        return None
 
     audio_data = []
     texts = []
@@ -195,7 +159,6 @@ def prepare_dataset(augment=True):
         audio = load_audio(rec['audio_path'])
 
         if augment:
-            # Create augmented versions
             augmented = augment_audio(audio)
             for aug in augmented:
                 audio_data.append(aug)
@@ -206,7 +169,6 @@ def prepare_dataset(augment=True):
 
     print(f"\nTotal samples after augmentation: {len(audio_data)}")
 
-    # Create dataset
     dataset = Dataset.from_dict({
         'audio': audio_data,
         'text': texts,
@@ -221,49 +183,40 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     processor: Any
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # Extract audio and text
         audio_features = [f["input_features"] for f in features]
         label_features = [f["labels"] for f in features]
 
-        # Pad audio features
         batch = self.processor.feature_extractor.pad(
             {"input_features": audio_features},
             return_tensors="pt"
         )
 
-        # Pad labels
         labels_batch = self.processor.tokenizer.pad(
             {"input_ids": label_features},
             return_tensors="pt"
         )
 
-        # Replace padding with -100 for loss calculation
         labels = labels_batch["input_ids"].masked_fill(
             labels_batch.attention_mask.ne(1), -100
         )
 
-        # Remove BOS token if present
         if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().cpu().item():
             labels = labels[:, 1:]
 
         batch["labels"] = labels
-
         return batch
 
 
 def preprocess_function(examples, processor):
     """Preprocess audio and text for training."""
-    # Process audio
     audio = examples["audio"]
 
-    # Get input features
     input_features = processor.feature_extractor(
         audio,
         sampling_rate=SAMPLE_RATE,
         return_tensors="np"
     ).input_features[0]
 
-    # Tokenize text
     labels = processor.tokenizer(examples["text"]).input_ids
 
     return {
@@ -277,14 +230,11 @@ def compute_metrics(pred, processor):
     pred_ids = pred.predictions
     label_ids = pred.label_ids
 
-    # Replace -100 with pad token
     label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
 
-    # Decode predictions
     pred_str = processor.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = processor.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
-    # Calculate accuracy
     correct = sum(1 for p, l in zip(pred_str, label_str) if p.strip().lower() == l.strip().lower())
     accuracy = correct / len(pred_str) if pred_str else 0
 
@@ -300,18 +250,29 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"\nUsing device: {device}")
 
-    # Load processor and model
-    print(f"\nLoading {MODEL_NAME}...")
-    processor = WhisperProcessor.from_pretrained(MODEL_NAME)
-    model = WhisperForConditionalGeneration.from_pretrained(MODEL_NAME)
+    # Determine base model - continue from existing fine-tuned if available
+    if os.path.exists(OUTPUT_DIR):
+        base_model = OUTPUT_DIR
+        print(f"Continuing training from {OUTPUT_DIR}")
+    else:
+        base_model = MODEL_NAME
+        print(f"Starting fresh from {MODEL_NAME}")
 
-    # Configure model for English transcription
+    # Load processor and model
+    print(f"\nLoading model...")
+    processor = WhisperProcessor.from_pretrained(base_model)
+    model = WhisperForConditionalGeneration.from_pretrained(base_model)
+
     model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
     model.config.suppress_tokens = []
 
-    # Prepare dataset (from Recordings + Corrections)
+    # Prepare dataset
     print("\nPreparing dataset with augmentation...")
     dataset = prepare_dataset(augment=True)
+
+    if dataset is None:
+        print("\nNo training data available. Please add some recordings first.")
+        return False
 
     # Preprocess dataset
     print("\nPreprocessing dataset...")
@@ -320,7 +281,7 @@ def main():
         remove_columns=dataset.column_names,
     )
 
-    # Split into train/eval (90/10)
+    # Split into train/eval
     split = processed_dataset.train_test_split(test_size=0.1, seed=42)
     train_dataset = split["train"]
     eval_dataset = split["test"]
@@ -340,7 +301,7 @@ def main():
         learning_rate=5e-6,
         warmup_steps=25,
         max_steps=300,
-        gradient_checkpointing=False,  # Disable for MPS compatibility
+        gradient_checkpointing=False,
         fp16=False,
         eval_strategy="steps",
         eval_steps=50,
@@ -388,7 +349,8 @@ def main():
     print("="*60)
 
     model.eval()
-    test_recordings = load_recordings(RECORDINGS_DIR)[:5]
+    all_recordings = load_all_training_data()
+    test_recordings = all_recordings[:5]
 
     for rec in test_recordings:
         audio = load_audio(rec['audio_path'])
@@ -408,6 +370,9 @@ def main():
         match = "OK" if transcription.strip().lower() == expected.lower() else "MISS"
         print(f"  [{match}] Expected: '{expected}' | Got: '{transcription.strip()}'")
 
+    return True
+
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    exit(0 if success else 1)

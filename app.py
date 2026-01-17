@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """
-Web-based Speech Recognizer
+Parrot - Live Transcription App
 
-A Flask web application for speech recognition using fine-tuned Whisper.
-Supports both local HTTPS (for mobile browser microphone access) and
-production deployment (where the hosting platform handles SSL).
+Continuous speech-to-text transcription using fine-tuned Whisper.
+Designed to help recognize speech that standard models struggle with.
+
+Works on MacBook and iPhone (with HTTPS for mobile microphone access).
+Includes training interface to record, label, and fine-tune.
 """
 
 import os
+import sys
 import socket
 import base64
+import json
+import subprocess
+from datetime import datetime
+
 import numpy as np
+from scipy.io import wavfile
 from flask import Flask, render_template, request, jsonify
-from speech_recognizer import SpeechRecognizer, SAMPLE_RATE
+from speech_recognizer import LiveSpeechRecognizer, SAMPLE_RATE
 
 app = Flask(__name__)
 recognizer = None
 
-# Store last audio for corrections
-last_audio_data = None
-last_sample_rate = None
+# Recordings directory
+RECORDINGS_DIR = "./Recordings"
+os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 
 def get_local_ip():
@@ -35,7 +43,7 @@ def get_local_ip():
 
 
 def init_recognizer():
-    """Initialize the recognizer (called on module import for gunicorn)."""
+    """Initialize the recognizer."""
     global recognizer
 
     if recognizer is not None:
@@ -44,26 +52,13 @@ def init_recognizer():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    print("Initializing Speech Recognizer...")
-    recognizer = SpeechRecognizer()
-
-    # Load enrolled voice or auto-enroll from recordings
-    if recognizer.load_enrolled_voice():
-        print("Speaker filtering enabled (loaded existing profile)")
-    else:
-        print("No voice profile found - auto-enrolling from recordings...")
-        if recognizer.enroll_from_recordings():
-            print("Speaker filtering enabled (enrolled from recordings)")
-        else:
-            print("Could not enroll voice - speaker filtering disabled")
-
-    # Pre-load model
-    print("\nPre-loading Whisper model (this may take a moment)...")
+    print("Initializing Live Speech Recognizer...")
+    recognizer = LiveSpeechRecognizer()
     recognizer.load_model()
-    print("Recognizer initialized!")
+    print("Ready for live transcription!")
 
 
-# Initialize on module import (for gunicorn)
+# Initialize on module import
 init_recognizer()
 
 
@@ -73,11 +68,9 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/translate', methods=['POST'])
-def translate():
-    """Receive audio and return transcription."""
-    global last_audio_data, last_sample_rate
-
+@app.route('/transcribe', methods=['POST'])
+def transcribe():
+    """Transcribe an audio chunk."""
     try:
         data = request.json
         audio_base64 = data.get('audio')
@@ -90,28 +83,12 @@ def translate():
         audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
         sample_rate = data.get('sampleRate', 44100)
 
-        # Check audio energy
-        energy = np.sqrt(np.mean(audio_data**2))
-        if energy < 0.005:
-            return jsonify({'error': 'Audio too quiet. Please speak louder.'}), 400
-
-        # Store for potential correction
-        last_audio_data = audio_data.copy()
-        last_sample_rate = sample_rate
-
-        # Recognize speech
-        result = recognizer.recognize(audio_data, sample_rate)
-
-        if 'error' in result:
-            return jsonify({
-                'error': result['error'],
-                'speaker_segments': result.get('speaker_segments', [])
-            }), 400
+        # Transcribe
+        text = recognizer.transcribe(audio_data, sample_rate)
 
         return jsonify({
-            'transcription': result['transcription'],
-            'raw_transcription': result.get('raw_transcription', result['transcription']),
-            'speaker_segments': result.get('speaker_segments', [])
+            'text': text,
+            'is_final': data.get('is_final', False)
         })
 
     except Exception as e:
@@ -121,107 +98,10 @@ def translate():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/correct', methods=['POST'])
-def correct():
-    """Save a correction for future retraining."""
-    global last_audio_data, last_sample_rate
-
-    try:
-        data = request.json
-        correct_text = data.get('correct', '')
-
-        if not correct_text:
-            return jsonify({'error': 'Missing correct text'}), 400
-
-        if last_audio_data is None:
-            return jsonify({'error': 'No recent audio to correct'}), 400
-
-        # Save the correction (audio + correct label)
-        recognizer.save_correction(last_audio_data, last_sample_rate, correct_text)
-
-        correction_count = recognizer.get_correction_count()
-
-        return jsonify({
-            'success': True,
-            'message': f"Saved correction: '{correct_text}'",
-            'correction_count': correction_count
-        })
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/retrain', methods=['POST'])
-def retrain():
-    """Retrain the model with corrections."""
-    try:
-        result = recognizer.retrain_model()
-
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 400
-
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-
-@app.route('/retrain-status')
-def retrain_status():
-    """Get the number of pending corrections."""
-    correction_count = recognizer.get_correction_count()
-    return jsonify({
-        'correction_count': correction_count
-    })
-
-
-@app.route('/enroll', methods=['POST'])
-def enroll_voice():
-    """Enroll speaker's voice from audio samples."""
-    try:
-        data = request.json
-        audio_samples = data.get('samples', [])
-
-        if not audio_samples:
-            return jsonify({'error': 'No audio samples provided'}), 400
-
-        # Convert samples from base64
-        processed_samples = []
-        for sample in audio_samples:
-            audio_bytes = base64.b64decode(sample['audio'])
-            audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
-            sample_rate = sample.get('sampleRate', 44100)
-            processed_samples.append((audio_data, sample_rate))
-
-        # Enroll voice
-        success = recognizer.enroll_voice(processed_samples)
-
-        if success:
-            return jsonify({
-                'success': True,
-                'message': f'Voice enrolled with {len(processed_samples)} samples'
-            })
-        else:
-            return jsonify({'error': 'Failed to enroll voice'}), 400
-
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/voice-status')
-def voice_status():
-    """Check if voice is enrolled."""
-    enrolled = recognizer.enrolled_embedding is not None
-    return jsonify({
-        'enrolled': enrolled
-    })
+@app.route('/clear', methods=['POST'])
+def clear():
+    """Clear transcription history."""
+    return jsonify({'success': True})
 
 
 @app.route('/health')
@@ -230,37 +110,239 @@ def health():
     return jsonify({'status': 'healthy'})
 
 
+# ============================================================
+# Training Interface Endpoints
+# ============================================================
+
+@app.route('/training')
+def training():
+    """Serve the training page."""
+    return render_template('training.html')
+
+
+@app.route('/recordings', methods=['GET'])
+def list_recordings():
+    """List all recordings."""
+    recordings = []
+
+    if os.path.exists(RECORDINGS_DIR):
+        for filename in sorted(os.listdir(RECORDINGS_DIR)):
+            if not filename.endswith('.wav'):
+                continue
+
+            wav_path = os.path.join(RECORDINGS_DIR, filename)
+            json_path = wav_path.replace('.wav', '.json')
+
+            # Get label from JSON or filename
+            if os.path.exists(json_path):
+                with open(json_path, 'r') as f:
+                    metadata = json.load(f)
+                label = metadata.get('label', '')
+                timestamp = metadata.get('timestamp', '')
+            else:
+                label = os.path.splitext(filename)[0]
+                timestamp = ''
+
+            # Get file size
+            size = os.path.getsize(wav_path)
+
+            recordings.append({
+                'id': filename.replace('.wav', ''),
+                'filename': filename,
+                'label': label,
+                'timestamp': timestamp,
+                'size': size
+            })
+
+    return jsonify({'recordings': recordings})
+
+
+@app.route('/recordings', methods=['POST'])
+def save_recording():
+    """Save a new recording with label."""
+    try:
+        data = request.json
+        audio_base64 = data.get('audio')
+        label = data.get('label', '').strip()
+        sample_rate = data.get('sampleRate', 44100)
+
+        if not audio_base64:
+            return jsonify({'error': 'No audio data'}), 400
+
+        if not label:
+            return jsonify({'error': 'No label provided'}), 400
+
+        # Decode audio
+        audio_bytes = base64.b64decode(audio_base64)
+        audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
+
+        # Resample to 16kHz if needed
+        if sample_rate != SAMPLE_RATE:
+            import librosa
+            audio_data = librosa.resample(
+                audio_data, orig_sr=sample_rate, target_sr=SAMPLE_RATE
+            )
+
+        # Create filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_label = label.lower().replace(' ', '_')
+        safe_label = ''.join(c for c in safe_label if c.isalnum() or c == '_')
+        filename = f"{safe_label}_{timestamp}"
+
+        # Save WAV file
+        wav_path = os.path.join(RECORDINGS_DIR, f"{filename}.wav")
+        audio_int16 = (audio_data * 32767).astype(np.int16)
+        wavfile.write(wav_path, SAMPLE_RATE, audio_int16)
+
+        # Save metadata JSON
+        json_path = os.path.join(RECORDINGS_DIR, f"{filename}.json")
+        metadata = {
+            'label': label.lower(),
+            'timestamp': timestamp,
+            'sample_rate': SAMPLE_RATE
+        }
+        with open(json_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'id': filename,
+            'message': f"Saved: '{label}'"
+        })
+
+    except Exception as e:
+        print(f"Error saving recording: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/recordings/<recording_id>', methods=['DELETE'])
+def delete_recording(recording_id):
+    """Delete a recording."""
+    try:
+        wav_path = os.path.join(RECORDINGS_DIR, f"{recording_id}.wav")
+        json_path = os.path.join(RECORDINGS_DIR, f"{recording_id}.json")
+
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+        if os.path.exists(json_path):
+            os.remove(json_path)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/train', methods=['POST'])
+def start_training():
+    """Start model fine-tuning."""
+    global recognizer
+
+    try:
+        # Check if there are recordings
+        recordings = [f for f in os.listdir(RECORDINGS_DIR) if f.endswith('.wav')]
+        if not recordings:
+            return jsonify({
+                'success': False,
+                'message': 'No recordings found. Add some training samples first.'
+            }), 400
+
+        print(f"\nStarting fine-tuning with {len(recordings)} recordings...")
+
+        # Run fine-tuning script
+        env = os.environ.copy()
+        env['PYTHONWARNINGS'] = 'ignore'
+
+        result = subprocess.run(
+            [sys.executable, 'finetune_whisper.py'],
+            capture_output=True,
+            text=True,
+            timeout=3600,
+            env=env
+        )
+
+        if 'Fine-tuning complete' in result.stdout or result.returncode == 0:
+            # Reload the model
+            print("Reloading model...")
+            recognizer = None
+            init_recognizer()
+
+            return jsonify({
+                'success': True,
+                'message': f'Model trained successfully with {len(recordings)} recordings!'
+            })
+        else:
+            stderr_lines = [l for l in result.stderr.split('\n') if l.strip() and 'Warning' not in l]
+            error_msg = stderr_lines[-1] if stderr_lines else result.stderr[:200]
+            return jsonify({
+                'success': False,
+                'message': f'Training failed: {error_msg}'
+            }), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'message': 'Training timed out (exceeded 1 hour)'
+        }), 500
+    except Exception as e:
+        print(f"Training error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/train-status')
+def train_status():
+    """Get training data status."""
+    recordings = []
+    if os.path.exists(RECORDINGS_DIR):
+        recordings = [f for f in os.listdir(RECORDINGS_DIR) if f.endswith('.wav')]
+
+    model_exists = os.path.exists('./whisper-finetuned')
+
+    return jsonify({
+        'recording_count': len(recordings),
+        'model_exists': model_exists
+    })
+
+
 def main():
     """Run the Flask server."""
-    # Check if running in production (via PORT env var)
-    port = int(os.environ.get('PORT', 5001))
+    port = 5001
+    local_ip = get_local_ip()
 
-    # Check if SSL certs exist for local HTTPS
-    ssl_available = os.path.exists('cert.pem') and os.path.exists('key.pem')
+    # Check for SSL certificates
+    cert_file = 'cert.pem'
+    key_file = 'key.pem'
+    ssl_available = os.path.exists(cert_file) and os.path.exists(key_file)
+
+    print("\n" + "="*60)
+    print("  Parrot - Live Transcription")
+    print("="*60)
 
     if ssl_available:
-        # Local development with HTTPS (required for mobile microphone access)
-        local_ip = get_local_ip()
-
-        print("\n" + "="*60)
-        print("  Speech Recognizer Web App (HTTPS)")
-        print("="*60)
-        print(f"\n  Local access: https://localhost:{port}")
-        print(f"  Network access: https://{local_ip}:{port}")
-        print(f"\n  (Make sure mobile device is on the same WiFi network)")
-        print("\n  NOTE: Browser will show a security warning for self-signed cert.")
-        print("  Click 'Advanced' -> 'Proceed' (or equivalent for your browser)")
-        print("="*60 + "\n")
-
-        app.run(host='0.0.0.0', port=port, debug=False,
-                ssl_context=('cert.pem', 'key.pem'))
+        print(f"\n  MacBook:  https://localhost:{port}")
+        print(f"  iPhone:   https://{local_ip}:{port}")
+        print("\n  (Accept the security warning on iPhone)")
     else:
-        # Production mode (SSL handled by hosting platform)
-        print(f"\nStarting server on port {port}...")
-        print("(No SSL certs found - running in HTTP mode)")
-        print("For mobile access, deploy to a platform that provides SSL.\n")
+        print(f"\n  MacBook:  http://localhost:{port}")
+        print(f"\n  For iPhone access, generate SSL certificates:")
+        print(f"  openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj \"/CN=localhost\"")
 
-        app.run(host='0.0.0.0', port=port, debug=False)
+    print("\n  Press the button (or Spacebar) to start.")
+    print("  Speak naturally - text appears as you talk.")
+    print("="*60 + "\n")
+
+    if ssl_available:
+        app.run(host='0.0.0.0', port=port, debug=False,
+                ssl_context=(cert_file, key_file))
+    else:
+        app.run(host='127.0.0.1', port=port, debug=False)
 
 
 if __name__ == '__main__':
