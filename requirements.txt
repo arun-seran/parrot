@@ -8,6 +8,3 @@ scipy>=1.7.0
 torch>=2.0.0
 transformers>=4.30.0
 datasets>=2.0.0
-
-# Speaker recognition (optional - for voice filtering)
-resemblyzer>=0.1.1
