@@ -1,9 +1,13 @@
-# Speech Helper
+# Parrot
 
-A speech recognition app designed for voices that standard speech-to-text models struggle with. Fine-tune OpenAI's Whisper model on your own recordings to create a personalized speech recognition system.
+Parrot is an open-source speech recognition app designed for voices that standard speech-to-text models struggle with.
+
+It enables personalized speech recognition by fine-tuning OpenAI’s Whisper model on your own recordings, allowing the system to learn directly from examples instead of relying on brittle rule-based hacks.
+
+This project was built primarily to help children with speech difficulties, but it may also work for accented speech, unique vocabularies, and any voice that off-the-shelf models misrecognize. 
 
 **Use cases:**
-- Children with speech difficulties (apraxia, dysarthria, etc.)
+- Children with speech difficulties (autism etc.)
 - Accented speech
 - Unique vocabularies or terminology
 - Any speech that off-the-shelf models misrecognize
