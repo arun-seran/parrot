@@ -37,7 +37,7 @@ This app was built primarily to help children with speech difficulties (due to a
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/ArunSaxena200/parrot.git
+git clone https://github.com/arun-seran/parrot.git
 cd parrot
 ```
 
@@ -91,7 +91,7 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -node
 
 The app will automatically use HTTPS if it finds `cert.pem` and `key.pem`.
 
-Access from your phone using your computer's IP address (e.g., `https://192.168.1.100:5001`). You'll need to accept the security warning.
+Access from your phone using your computer's IP address (e.g., `https://192.168.23.34:5001`). You'll need to accept the security warning.
 
 ## Project Structure
 
